@@ -3,6 +3,7 @@ import socket
 import struct
 import os
 import time
+import curses
 
 canformat = '<IB3x8s'
 can_frame_fmt = "=IB3x8s" # from https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
@@ -125,8 +126,87 @@ class CanBridge():
         self.canSocket_to.settimeout(None)
         self.canSocket_from.settimeout(None)
 
+
     def run(self, display=True):
+        attack14FF4064 = False
+        attack14FF4164 = False
+        attack14FF4264 = False
+        attack14FF4364 = False
+        attack14FF4464 = False
+        attack14FF4564 = False
+        attack14FF4664 = False
+        attack14FF4764 = False
+        attack14FF4864 = False
+        attack14FF4964 = False
+        attack14FF5064 = False
+        attack14FF5164 = False
+        attack14FF5264 = False
+        attack14FF5364 = False
+        attack14FF5464 = False
+        attack14FF5564 = False
+        attack14FF5664 = False
+        attack14FF5864 = False
+        attack18EEFF64 = False
+        attack18FECA64 = False
+        attack18FF5764 = False
+        attack18FF5964 = False
+        attack18FF9FF3 = False
+        attack1CEBFF64 = False
+        attack1CECFF64 = False
+
         while True:
+            press = chr(screen.getch())
+            if press == 'a':
+                attack14FF4064 = not(attack14FF4064)
+            if press == 'b':
+                attack14FF4164 = not(attack14FF4164)
+            if press == 'c':
+                attack14FF4264 = not(attack14FF4264)
+            if press == 'd':
+                attack14FF4364 = not(attack14FF4364)
+            if press == 'e':
+                attack14FF4464 = not(attack14FF4464)
+            if press == 'f':
+                attack14FF4564 = not(attack14FF4564)
+            if press == 'g':
+                attack14FF4664 = not(attack14FF4664)
+            if press == 'h':
+                attack14FF4764 = not(attack14FF4764)
+            if press == 'i':
+                attack14FF4864 = not(attack14FF4864)
+            if press == 'j':
+                attack14FF4964 = not(attack14FF4964)
+            if press == 'k':
+                attack14FF5064 = not(attack14FF5064)
+            if press == 'l':
+                attack14FF5164 = not(attack14FF5164)
+            if press == 'm':
+                attack14FF5264 = not(attack14FF5264)
+            if press == 'n':
+                attack14FF5364 = not(attack14FF5364)
+            if press == 'o':
+                attack14FF5464 = not(attack14FF5464)
+            if press == 'p':
+                attack14FF5564 = not(attack14FF5564)
+            if press == 'q':
+                attack14FF5664 = not(attack14FF5664)
+            if press == 'r':
+                attack14FF5864 = not(attack14FF5864)
+            if press == 's':
+                attack18EEFF64 = not(attack18EEFF64)
+            if press == 't':
+                attack18FECA64 = not(attack18FECA64)
+            if press == 'u':
+                attack18FF5764 = not(attack18FF5764)
+            if press == 'v':
+                attack18FF5964 = not(attack18FF5964)
+            if press == 'w':
+                attack18FF9FF3 = not(attack18FF9FF3)
+            if press == 'x':
+                attack1CEBFF64 = not(attack1CEBFF64)
+            if press == 'y':
+                attack1CECFF64 = not(attack1CECFF64)
+
             #raw_bytes_to = self.canSocket_from.recv(16)  # send from 1 to 0 unchanged, from BMS to BDUs
             #try:
             #    print("ft",end='')
@@ -171,87 +251,112 @@ class CanBridge():
                 candata_string = " ".join(["{:02X}".format(b) for b in candata])
                 #if canID == 14FF4064 : # 10hz # heartbeat counter
                 timenow = int(time.time())
-                if canID == 0x14FF4164 and (timenow & 0b0000000001 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4364 and (timenow & 0b0000000100 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4464 and (timenow & 0b0000001000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4664 and (timenow & 0b0000100000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4764 and (timenow & 0b0001000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4864 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4964 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5064 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5164 and (timenow & 0b0000000001 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5364 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5464 and (timenow & 0b0000001000 > 0) : # 5 hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5664 and (timenow & 0b0000100000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5864 and (timenow & 0b0001000000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18EEFF64 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FECA64 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF5764 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF5964 and (timenow & 0b0000000001 > 0) : # 5 hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF9FF3 and (timenow & 0b0000000010 > 0) : # 20 times a second!
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x1CEBFF64 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x1CECFF64 and (timenow & 0b0000001000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
+                if canID == 0x14FF4164:
+                    if attack14FF4164 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4264:
+                    if attack14FF4264 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4364:
+                    if attack14FF4364 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4464:
+                    if attack14FF4464 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4564:
+                    if attack14FF4564 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4664:
+                    if attack14FF4664 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4764:
+                    if attack14FF4764 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4864:
+                    if attack14FF4864 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF4964:
+                    if attack14FF4964 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5064:
+                    if attack14FF5064 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5164:
+                    if attack14FF5164 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5264:
+                    if attack14FF5264 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5364:
+                    if attack14FF5364 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5464:
+                    if attack14FF5464 : # 5 hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5564:
+                    if attack14FF5564 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5664:
+                    if attack14FF5664 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x14FF5864:
+                    if attack14FF5864 : # 10hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x18EEFF64:
+                    if attack18EEFF64 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x18FECA64:
+                    if attack18FECA64 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x18FF5764:
+                    if attack18FF5764 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x18FF5964:
+                    if attack18FF5964 : # 5 hz
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x18FF9FF3:
+                    if attack18FF9FF3 : # 20 times a second!
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x1CEBFF64:
+                    if attack1CEBFF64 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
+                if canID == 0x1CECFF64:
+                    if attack1CECFF64 :
+                        screen.addstr(    candata_string+":",end="")
+                        candata=bytes(8)
 
                 if display:   
                     candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
+                    screen.addstr("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
 
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
+    screen = curses.initscr()
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
     bridge.run()
 '''
