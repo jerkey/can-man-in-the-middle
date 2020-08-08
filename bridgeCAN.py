@@ -4,6 +4,7 @@ import struct
 import os
 
 canformat = '<IB3x8s'
+can_frame_fmt = "=IB3x8s" # from https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
 
 #From https://github.com/torvalds/linux/blob/master/include/uapi/linux/can.h
 #special address description flags for the CAN_ID
@@ -56,14 +57,15 @@ CAN_ERR_MASK = 0x1FFFFFFF # /* omit EFF, RTR, ERR flags */
 
 
 class CanBridge():
-    def __init__(self, interface_from, interface_to,bitrate_to=250000,bitrate_from=250000):
+    def __init__(self, interface_from, interface_to,bitrate_to,bitrate_from):
         #set CAN bit rates. Must have super user privilages.
-        os.system('ip link set {} down'.format(interface_from))
-        os.system('ip link set {} type can bitrate {}'.format(interface_from, bitrate_from))
-        os.system('ip link set {} up'.format(interface_from))
-        os.system('ip link set {} down'.format(interface_to))
-        os.system('ip link set {} type can bitrate {}'.format(interface_to, bitrate_to))
-        os.system('ip link set {} up'.format(interface_to))
+        #os.system('sudo ip link set {} down'.format(interface_from))
+        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_from, bitrate_from))
+        #os.system('sudo ip link set {} up'.format(interface_from))
+        #os.system('sudo ip link set {} down'.format(interface_to))
+        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_to, bitrate_to))
+        #os.system('sudo ip link set {} up'.format(interface_to))
+        # os.system('can.sh pass') # open relay for mitm
 
         self.canSocket_to = socket.socket(socket.PF_CAN, 
                                           socket.SOCK_RAW, 
@@ -122,18 +124,20 @@ class CanBridge():
         self.canSocket_to.settimeout(None)
         self.canSocket_from.settimeout(None)
 
-    def run(self, display=False):
+    def run(self, display=True):
         while True:
-            raw_bytes = self.canSocket_from.recv(16)
-            try:
-                self.canSocket_to.send(raw_bytes)
+            #raw_bytes_to = self.canSocket_from.recv(16)  # send from 1 to 0 unchanged, from BMS to BDUs
+            #try:
+            #    print("ft",end='')
+            #    self.canSocket_to.send(raw_bytes_to) # sendin from 1 to 0
 
-            except OSError: #Buffer overflow usually from lack of connection.
-                if display:
-                    print("error writing can.")
-                else:
-                    pass
-            raw_bytes_from = self.canSocket_to.recv(16)
+            #except OSError: #Buffer overflow usually from lack of connection.
+            #    if display:
+            #        print("error writing can.")
+            #    else:
+            #        pass
+
+            raw_bytes_from = self.canSocket_to.recv(16) # receive message from a BDU on can0
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
@@ -160,15 +164,41 @@ class CanBridge():
                     print("Controller restarted")
             elif rawID & CAN_RTR_FLAG == CAN_RTR_FLAG:
                 print("Received RTR frame.")
-            else:
-                #Normal data frame
+            else: #Normal data frame
                 if display:   
                     canID = rawID & 0x1FFFFFFF
                     candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                    print("{:08X} {}".format(canID, candata_string))
+                    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
+                    # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
+                    if canID == 0x14FF4365:
+                        print("14FF4365",end="")
+                        candata=bytes(list(b'\x00\x7D\x04\x46\x17\x00\x00\x00'))
+                    if canID == 0x14FF4565:
+                        print("14FF4565",end="")
+                        candata=bytes(list(b'\x49\x09\x0D\x36\x79\x09\x3C\x09'))
+                    if canID == 0x14FF4765:
+                        print("14FF4765",end="")
+                        candata=bytes(list(b'\x42\x80\x41\x20\x41\x00\x00\x00'))
+                    if canID == 0x14FF5365:
+                        print("14FF5365",end="")
+                        candata=bytes(list(b'\x1F\x35\x00\xFF\x24\xBD\xD7\x23'))
+                    if canID == 0x14FF5565 and candata[0] > 0x20:
+                        candata=bytes(list(b'\xE0\x4C\x70\x26\x38\x13\x00\x20'))
+                    if canID == 0x14FF5765:
+                        print("14FF5765",end="")
+                        candata=bytes(list(b'\x98\x00\x00\x23\x00\x32\x00\x00'))
+                    if canID == 0x14FF6365:
+                        print("14FF6365",end="")
+                        candata=bytes(list(b'\x24\x08\x36\x0C\x15\x13\x3B\x17'))
+                    if canID == 0x14FF6765:
+                        print("14FF6765",end="")
+                        candata=bytes(list(b'\x00\x52\x16\x18\x80\x80\xE2\x33'))
 
-if __name__ == '__main__':
-    bridge = CanBridge('can0','can1',bitrate_from=250000,bitrate_to=250000)
+            self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
+            # self.canSocket_from.send(raw_bytes_from)
+
+if __name__ == '__main__': #       can1=BMS             can0=BDUs
+    bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
     bridge.run()
 '''
 https://github.com/torvalds/linux/blob/master/include/uapi/linux/can/error.h
