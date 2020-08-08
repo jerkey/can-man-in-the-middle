@@ -2,6 +2,7 @@
 import socket
 import struct
 import os
+import time
 
 canformat = '<IB3x8s'
 can_frame_fmt = "=IB3x8s" # from https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
@@ -165,39 +166,92 @@ class CanBridge():
             elif rawID & CAN_RTR_FLAG == CAN_RTR_FLAG:
                 print("Received RTR frame.")
             else: #Normal data frame
+                canID = rawID & 0x1FFFFFFF
+                # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
+                candata_string = " ".join(["{:02X}".format(b) for b in candata])
+                #if canID == 14FF4064 : # 10hz # heartbeat counter
+                timenow = int(time.time())
+                if canID == 0x14FF4164 and (timenow & 0b0000000001 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4264 and (timenow & 0b0000000010 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4364 and (timenow & 0b0000000100 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4464 and (timenow & 0b0000001000 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4564 and (timenow & 0b0000010000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4664 and (timenow & 0b0000100000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4764 and (timenow & 0b0001000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4864 and (timenow & 0b0010000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF4964 and (timenow & 0b0100000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5064 and (timenow & 0b1000000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5164 and (timenow & 0b0000000001 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5264 and (timenow & 0b0000000010 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5364 and (timenow & 0b0000000100 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5464 and (timenow & 0b0000001000 > 0) : # 5 hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5564 and (timenow & 0b0000010000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5664 and (timenow & 0b0000100000 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x14FF5864 and (timenow & 0b0001000000 > 0) : # 10hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x18EEFF64 and (timenow & 0b0010000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x18FECA64 and (timenow & 0b0100000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x18FF5764 and (timenow & 0b1000000000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x18FF5964 and (timenow & 0b0000000001 > 0) : # 5 hz
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x18FF9FF3 and (timenow & 0b0000000010 > 0) : # 20 times a second!
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x1CEBFF64 and (timenow & 0b0000000100 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+                if canID == 0x1CECFF64 and (timenow & 0b0000001000 > 0) :
+                    print(candata_string+":",end="")
+                    candata=bytes(8)
+
                 if display:   
-                    canID = rawID & 0x1FFFFFFF
                     candata_string = " ".join(["{:02X}".format(b) for b in candata])
                     print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
-                    # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
-                    if canID == 0x14FF4365:
-                        print("14FF4365",end="")
-                        candata=bytes(list(b'\x00\x7D\x04\x46\x17\x00\x00\x00'))
-                    if canID == 0x14FF4565:
-                        print("14FF4565",end="")
-                        candata=bytes(list(b'\x49\x09\x0D\x36\x79\x09\x3C\x09'))
-                    if canID == 0x14FF4765:
-                        print("14FF4765",end="")
-                        candata=bytes(list(b'\x42\x80\x41\x20\x41\x00\x00\x00'))
-                    if canID == 0x14FF5365:
-                        print("14FF5365",end="")
-                        candata=bytes(list(b'\x1F\x35\x00\xFF\x24\xBD\xD7\x23'))
-                    if canID == 0x14FF5565 and candata[0] > 0x20:
-                        candata=bytes(list(b'\xE0\x4C\x70\x26\x38\x13\x00\x20'))
-                    if canID == 0x14FF5765:
-                        print("14FF5765",end="")
-                        candata=bytes(list(b'\x98\x00\x00\x23\x00\x32\x00\x00'))
-                    if canID == 0x14FF6365:
-                        print("14FF6365",end="")
-                        candata=bytes(list(b'\x24\x08\x36\x0C\x15\x13\x3B\x17'))
-                    if canID == 0x14FF6765:
-                        print("14FF6765",end="")
-                        candata=bytes(list(b'\x00\x52\x16\x18\x80\x80\xE2\x33'))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
 
-if __name__ == '__main__': #       can1=BMS             can0=BDUs
+if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
     bridge.run()
 '''
