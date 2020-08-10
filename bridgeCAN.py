@@ -4,6 +4,8 @@ import struct
 import os
 import time
 
+ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
+
 canformat = '<IB3x8s'
 can_frame_fmt = "=IB3x8s" # from https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
 
@@ -170,83 +172,26 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 candata_string = " ".join(["{:02X}".format(b) for b in candata])
                 #if canID == 14FF4064 : # 10hz # heartbeat counter
-                timenow = int(time.time())
-                if canID == 0x14FF4164 and (timenow & 0b0000000001 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4364 and (timenow & 0b0000000100 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4464 and (timenow & 0b0000001000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4664 and (timenow & 0b0000100000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4764 and (timenow & 0b0001000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4864 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF4964 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5064 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5164 and (timenow & 0b0000000001 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5364 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5464 and (timenow & 0b0000001000 > 0) : # 5 hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5664 and (timenow & 0b0000100000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x14FF5864 and (timenow & 0b0001000000 > 0) : # 10hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18EEFF64 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FECA64 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF5764 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF5964 and (timenow & 0b0000000001 > 0) : # 5 hz
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x18FF9FF3 and (timenow & 0b0000000010 > 0) : # 20 times a second!
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x1CEBFF64 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
-                if canID == 0x1CECFF64 and (timenow & 0b0000001000 > 0) :
-                    print(candata_string+":",end="")
-                    candata=bytes(8)
+                timenow = int(time.time() / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
+                if canID == ids[(timenow >> 6) % 25]: # bits 6-10 choose which canID we care about
+                    candatalist = list(candata) # get a list that we can tamper with
+                    if timenow & (1<<11) > 0: # bit 11 modify a whole byte
+                        if timenow & (1<<12) > 0: # bit 12 set bits
+                            candatalist[timenow & 7] |= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
+                        else:                     # clear bits
+                            candatalist[timenow & 7] &= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
+                    else: # modify just one bit
+                        if timenow & (1<<12) > 0: # bit 12 set bit
+                            candatalist[timenow & 7] |= 1 << ((timenow >> 3) & 7) # set a bit
+                        else:
+                            candatalist[timenow & 7] &= 255 - (1 << ((timenow >> 3) & 7)) # clear a bit
 
-                if display:   
-                    candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
+                    candata=bytes(candatalist) # struct.pack needs a bytes() which is immutable
+                    print("modifying according to "+str(timenow)+" at time "+str(time.time()))
+
+                #if display:   
+                #    candata_string = " ".join(["{:02X}".format(b) for b in candata])
+                #    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
