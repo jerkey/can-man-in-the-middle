@@ -2,7 +2,21 @@
 import socket
 import struct
 import os
+import curses
 import time
+
+screen = curses.initscr()
+screen.addstr(0,10,"Hit 'q' to quit")
+screen.refresh()
+screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes-python-curses-program-to-exit
+screen.scrollok(True) # allow gcode to scroll screen
+
+ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
+fuckwith = [ True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+
+def sprnt(texttoprnt):
+    screen.addstr(texttoprnt+'\n\r')
+    screen.refresh()
 
 canformat = '<IB3x8s'
 can_frame_fmt = "=IB3x8s" # from https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
@@ -90,12 +104,12 @@ class CanBridge():
                                      socket.CAN_RAW_FILTER,
                                      can_filter)
         ret_val = self.canSocket_to.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
-        print("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
+        sprnt("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
         self.canSocket_from.setsockopt(socket.SOL_CAN_RAW, 
                                      socket.CAN_RAW_FILTER,
                                      can_filter)
         ret_val = self.canSocket_from.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
-        print("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
+        sprnt("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
         
         # Set the system to receive every possible error
         can_error_filter = struct.pack('L',CAN_ERR_MASK)
@@ -106,13 +120,13 @@ class CanBridge():
                                      socket.CAN_RAW_ERR_FILTER,
                                      can_error_filter)
         ret_val = self.canSocket_to.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
-        print("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
+        sprnt("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
         
         self.canSocket_from.setsockopt(socket.SOL_CAN_RAW, 
                                      socket.CAN_RAW_ERR_FILTER,
                                      can_error_filter)
         ret_val = self.canSocket_from.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
-        print("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
+        sprnt("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
         
         self.interface_from = interface_from
         self.interface_to = interface_to
@@ -120,21 +134,27 @@ class CanBridge():
             self.canSocket_to.bind((interface_to,))
             self.canSocket_from.bind((interface_from,))
         except OSError: 
-            print("Could not bind to SocketCAN interfaces")
+            sprnt("Could not bind to SocketCAN interfaces")
         #put the sockets in blocking mode.
         self.canSocket_to.settimeout(None)
         self.canSocket_from.settimeout(None)
 
     def run(self, display=True):
+        global fuckwith # access the message filter array
         while True:
+            key = screen.getch() # this is blocking unless you do .nodelay(1)
+            if key != -1: # a key was pressed
+                screen.addstr("you pressed "+chr(key)+str(key)+'\n\r') #screen.addch(20,25,key)
+                screen.refresh()
+
             #raw_bytes_to = self.canSocket_from.recv(16)  # send from 1 to 0 unchanged, from BMS to BDUs
             #try:
-            #    print("ft",end='')
+            #    sprnt("ft",end='')
             #    self.canSocket_to.send(raw_bytes_to) # sendin from 1 to 0
 
             #except OSError: #Buffer overflow usually from lack of connection.
             #    if display:
-            #        print("error writing can.")
+            #        sprnt("error writing can.")
             #    else:
             #        pass
 
@@ -142,29 +162,29 @@ class CanBridge():
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
-                print("Found Error Frame.")
-                print("RawID: {:08X}, data: {}".format(rawID,candata))
+                sprnt("Found Error Frame.")
+                sprnt("RawID: {:08X}, data: {}".format(rawID,candata))
 
                 if canID == 1:
-                    print("TX timeout")
+                    sprnt("TX timeout")
                 elif canID == 2:
-                    print ("Lost arbitration")
+                    sprnt ("Lost arbitration")
                 elif canID == 4:
-                    print("Controller problems")
+                    sprnt("Controller problems")
                 elif canID == 8:
-                    print("Protocol violations")
+                    sprnt("Protocol violations")
                 elif canID == 16:
-                    print("Transceiver status") 
+                    sprnt("Transceiver status") 
                 elif canID == 32:
-                    print("No Acknkowlegement on transmission")
+                    sprnt("No Acknkowlegement on transmission")
                 elif canID == 64:
-                    print("Bus off")
+                    sprnt("Bus off")
                 elif canID == 128:
-                    print("{:03X}: Bus error. {}".format(canID,candata))
+                    sprnt("{:03X}: Bus error. {}".format(canID,candata))
                 elif canID == 0x100:
-                    print("Controller restarted")
+                    sprnt("Controller restarted")
             elif rawID & CAN_RTR_FLAG == CAN_RTR_FLAG:
-                print("Received RTR frame.")
+                sprnt("Received RTR frame.")
             else: #Normal data frame
                 canID = rawID & 0x1FFFFFFF
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
@@ -172,81 +192,81 @@ class CanBridge():
                 #if canID == 14FF4064 : # 10hz # heartbeat counter
                 timenow = int(time.time())
                 if canID == 0x14FF4164 and (timenow & 0b0000000001 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4364 and (timenow & 0b0000000100 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4464 and (timenow & 0b0000001000 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4664 and (timenow & 0b0000100000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4764 and (timenow & 0b0001000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4864 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF4964 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5064 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5164 and (timenow & 0b0000000001 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5364 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5464 and (timenow & 0b0000001000 > 0) : # 5 hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5564 and (timenow & 0b0000010000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5664 and (timenow & 0b0000100000 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x14FF5864 and (timenow & 0b0001000000 > 0) : # 10hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x18EEFF64 and (timenow & 0b0010000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x18FECA64 and (timenow & 0b0100000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x18FF5764 and (timenow & 0b1000000000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x18FF5964 and (timenow & 0b0000000001 > 0) : # 5 hz
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x18FF9FF3 and (timenow & 0b0000000010 > 0) : # 20 times a second!
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x1CEBFF64 and (timenow & 0b0000000100 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
                 if canID == 0x1CECFF64 and (timenow & 0b0000001000 > 0) :
-                    print(candata_string+":",end="")
+                    screen.addstr(candata_string+":")
                     candata=bytes(8)
 
                 if display:   
                     candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
+                    sprnt("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
