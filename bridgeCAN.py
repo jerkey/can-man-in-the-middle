@@ -223,12 +223,14 @@ if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
     starttimeoffset = 0 # unless we pass a starttime to the commandline
     starttime = int(time.time()) # when we actually began
+    logfile = open(str(starttime)+'.mitmlog','w')
+    logfile.write('logfile starting at '+str(time.time())+'\n')
     if len(sys.argv) > 1:
         print("pretending to start at time "+sys.argv[1])
         starttimeoffset = starttime - int(sys.argv[1])
         print("starttimeoffset = "+str(starttimeoffset))
-    logfile = open(str(starttime)+'.mitmlog','w')
-    logfile.write('logfile starting at '+str(time.time())+'\n')
+        logfile.write("pretending to start at time "+sys.argv[1]+'\n')
+        logfile.write("starttimeoffset = "+str(starttimeoffset)+'\n')
     logfile.flush()
     bridge.run()
     logfile.write("logfile stopping at "+str(time.time())+'\n')
