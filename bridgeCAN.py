@@ -139,18 +139,18 @@ class CanBridge():
                 if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
                     for b in range(DLC):
                         candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
                     logfile.flush()
             if canID == 0x041:
                 if candata[0] != 0x08:
                     for b in range(DLC):
                         candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
                     logfile.flush()
             #if timestamp % 10 == 0: # every 20 seconds, just for troubleshooting
             #        for b in range(DLC):
             #            candata_string += " {:02X}".format(candata[b])
-            #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+            #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
             #        logfile.flush()
 
     def run(self, display=True):
