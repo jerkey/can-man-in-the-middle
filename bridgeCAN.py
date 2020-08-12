@@ -3,6 +3,7 @@ import socket
 import struct
 import os
 import time
+import sys
 
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
 
@@ -154,7 +155,7 @@ class CanBridge():
 
     def run(self, display=True):
         while True:
-            timenow = int(time.time() / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
+            timenow = int((time.time() - starttimeoffset) / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
             if timenow > ((starttime >> 1) + (1<<13)):
                 return
 
@@ -220,7 +221,12 @@ class CanBridge():
 
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
+    starttimeoffset = 0 # unless we pass a starttime to the commandline
     starttime = int(time.time()) # when we actually began
+    if len(sys.argv) > 1:
+        print("pretending to start at time "+sys.argv[1])
+        starttimeoffset = starttime - int(sys.argv[1])
+        print("starttimeoffset = "+str(starttimeoffset))
     logfile = open(str(starttime)+'.mitmlog','w')
     logfile.write('logfile starting at '+str(time.time())+'\n')
     logfile.flush()
