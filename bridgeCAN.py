@@ -125,20 +125,40 @@ class CanBridge():
             print("Could not bind to SocketCAN interfaces")
         #put the sockets in blocking mode.
         self.canSocket_to.settimeout(None)
-        self.canSocket_from.settimeout(None)
+        self.canSocket_from.settimeout(0.0) # non-blocking with 0.0 timeout
+
+    def checkMotorSignals(self,timestamp):
+        raw_bytes_to = self.canSocket_from.recv(16)
+        if raw_bytes_to != None: # if a CAN message was waiting
+            self.canSocket_to.send(raw_bytes_to) # sending from 1 to 0
+            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
+            canID = rawID & 0x1FFFFFFF
+            candata_string = ""
+            if canID == 0x040:
+                if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
+                    for b in range(DLC):
+                        candata_string += " {:02X}".format(candata[b])
+                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+                    logfile.flush()
+            if canID == 0x041:
+                if candata[0] != 0x08:
+                    for b in range(DLC):
+                        candata_string += " {:02X}".format(candata[b])
+                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+                    logfile.flush()
+            #if timestamp % 10 == 0: # every 20 seconds, just for troubleshooting
+            #        for b in range(DLC):
+            #            candata_string += " {:02X}".format(candata[b])
+            #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[(timestamp >> 6) % 25], timestamp)+'\n')
+            #        logfile.flush()
 
     def run(self, display=True):
         while True:
-            #raw_bytes_to = self.canSocket_from.recv(16)  # send from 1 to 0 unchanged, from BMS to BDUs
-            #try:
-            #    print("ft",end='')
-            #    self.canSocket_to.send(raw_bytes_to) # sendin from 1 to 0
+            timenow = int(time.time() / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
+            if timenow > ((starttime >> 1) + (1<<13)):
+                return
 
-            #except OSError: #Buffer overflow usually from lack of connection.
-            #    if display:
-            #        print("error writing can.")
-            #    else:
-            #        pass
+            self.checkMotorSignals(timenow) # if messages heading from vehicle, check them
 
             raw_bytes_from = self.canSocket_to.recv(16) # receive message from a BDU on can0
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
@@ -170,9 +190,10 @@ class CanBridge():
             else: #Normal data frame
                 canID = rawID & 0x1FFFFFFF
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
-                candata_string = " ".join(["{:02X}".format(b) for b in candata])
+                candata_string = ""
+                for b in range(DLC):
+                    candata_string += " {:02X}".format(candata[b])
                 #if canID == 14FF4064 : # 10hz # heartbeat counter
-                timenow = int(time.time() / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
                 if canID == ids[(timenow >> 6) % 25]: # bits 6-10 choose which canID we care about
                     candatalist = list(candata) # get a list that we can tamper with
                     if timenow & (1<<11) > 0: # bit 11 modify a whole byte
@@ -190,7 +211,8 @@ class CanBridge():
                     print("modifying according to "+str(timenow)+" at time "+str(time.time()))
 
                 #if display:   
-                #    candata_string = " ".join(["{:02X}".format(b) for b in candata])
+                #    for b in range(DLC):
+                #        candata_string += " {:02X}".format(candata[b])
                 #    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
@@ -198,7 +220,14 @@ class CanBridge():
 
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
+    starttime = int(time.time()) # when we actually began
+    logfile = open(str(starttime)+'.mitmlog','w')
+    logfile.write('logfile starting at '+str(time.time())+'\n')
+    logfile.flush()
     bridge.run()
+    logfile.write("logfile stopping at "+str(time.time())+'\n')
+    logfile.flush()
+    logfile.close()
 '''
 https://github.com/torvalds/linux/blob/master/include/uapi/linux/can/error.h
 /*
