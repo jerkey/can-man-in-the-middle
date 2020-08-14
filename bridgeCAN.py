@@ -12,7 +12,7 @@ screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes
 screen.scrollok(True) # allow gcode to scroll screen
 
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True]
+fuckwith = [ False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -137,28 +137,61 @@ class CanBridge():
             sprnt("Could not bind to SocketCAN interfaces")
         #put the sockets in blocking mode.
         self.canSocket_to.settimeout(None)
-        self.canSocket_from.settimeout(None)
+        self.canSocket_from.settimeout(0.0) # non-blocking with 0.0 timeout
+
+    def checkMotorSignals(self,timestamp):
+        raw_bytes_to = self.canSocket_from.recv(16)
+        if raw_bytes_to != None: # if a CAN message was waiting
+            self.canSocket_to.send(raw_bytes_to) # sending from 1 to 0
+            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
+            canID = rawID & 0x1FFFFFFF
+            candata_string = ""
+            if canID == 0x040:
+                if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
+                    for b in range(DLC):
+                        candata_string += " {:02X}".format(candata[b])
+                    logfile.write("{} {:08X}{} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
+                    logfile.flush()
+            if canID == 0x041:
+                if candata[0] != 0x08:
+                    for b in range(DLC):
+                        candata_string += " {:02X}".format(candata[b])
+                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
+                    logfile.flush()
+            #if timestamp % 10 == 0: # every 20 seconds, just for troubleshooting
+            #        for b in range(DLC):
+            #            candata_string += " {:02X}".format(candata[b])
+            #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
+            #        logfile.flush()
+
+    def logsettings(self,timestamp):
+        for i in range(len(fuckwith)):
+            if fuckwith[i]:
+                logfile.write("1")
+            else:
+                logfile.write("0")
+        logfile.write(" "+str(timestamp)+'\n\r')
+        logfile.flush()
 
     def run(self, display=True):
         global fuckwith # access the message filter array
         while True:
+            timenow = int((time.time()) / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
+            self.checkMotorSignals(timenow) # if messages heading from vehicle, check them
             key = screen.getch() # this is blocking unless you do .nodelay(1)
             if key != -1: # a key was pressed
-                screen.addstr("you pressed "+chr(key)+str(key)+'\n\r') #screen.addch(20,25,key)
-                screen.refresh()
+                if key & 0b11011111 >= ord('A') and key & 0b11011111 <= ord('Z'):
+                    if key & 0b00100000 > 0: # lowercase
+                        sprnt("pass {:08X}".format(ids[(key & 0b11011111) - 65 ]))
+                        logfile.write("pass {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
+                        fuckwith[(key & 0b11011111) - 65 ] = False;
+                    else: # uppercase
+                        sprnt("ZERO {:08X}".format(ids[(key & 0b11011111) - 65 ]))
+                        logfile.write("ZERO {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
+                        fuckwith[(key & 0b11011111) - 65 ] = True;
+                    self.logsettings(int(time.time()))
 
-            #raw_bytes_to = self.canSocket_from.recv(16)  # send from 1 to 0 unchanged, from BMS to BDUs
-            #try:
-            #    sprnt("ft",end='')
-            #    self.canSocket_to.send(raw_bytes_to) # sendin from 1 to 0
-
-            #except OSError: #Buffer overflow usually from lack of connection.
-            #    if display:
-            #        sprnt("error writing can.")
-            #    else:
-            #        pass
-
-            raw_bytes_from = self.canSocket_to.recv(16) # receive message from a BDU on can0
+            raw_bytes_from = self.canSocket_to.recv(16) # receive message from can0
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
@@ -188,91 +221,45 @@ class CanBridge():
             else: #Normal data frame
                 canID = rawID & 0x1FFFFFFF
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
-                candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                #if canID == 14FF4064 : # 10hz # heartbeat counter
-                timenow = int(time.time())
-                if canID == 0x14FF4164 and (timenow & 0b0000000001 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4364 and (timenow & 0b0000000100 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4464 and (timenow & 0b0000001000 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4564 and (timenow & 0b0000010000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4664 and (timenow & 0b0000100000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4764 and (timenow & 0b0001000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4864 and (timenow & 0b0010000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF4964 and (timenow & 0b0100000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5064 and (timenow & 0b1000000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5164 and (timenow & 0b0000000001 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5264 and (timenow & 0b0000000010 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5364 and (timenow & 0b0000000100 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5464 and (timenow & 0b0000001000 > 0) : # 5 hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5564 and (timenow & 0b0000010000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5664 and (timenow & 0b0000100000 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x14FF5864 and (timenow & 0b0001000000 > 0) : # 10hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x18EEFF64 and (timenow & 0b0010000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x18FECA64 and (timenow & 0b0100000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x18FF5764 and (timenow & 0b1000000000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x18FF5964 and (timenow & 0b0000000001 > 0) : # 5 hz
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x18FF9FF3 and (timenow & 0b0000000010 > 0) : # 20 times a second!
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x1CEBFF64 and (timenow & 0b0000000100 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
-                if canID == 0x1CECFF64 and (timenow & 0b0000001000 > 0) :
-                    screen.addstr(candata_string+":")
-                    candata=bytes(8)
+                if canID in ids:
+                    if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
+                        candata = bytes([50,50,50,50,50,50,50,50]) # zero this message
 
-                if display:   
-                    candata_string = " ".join(["{:02X}".format(b) for b in candata])
-                    sprnt("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
+
+                #candata_string = ""
+                #for b in range(DLC):
+                #    candata_string += " {:02X}".format(candata[b])
+                ##if canID == 14FF4064 : # 10hz # heartbeat counter
+                #if canID == ids[(timenow >> 6) % 25]: # bits 6-10 choose which canID we care about
+                #    candatalist = list(candata) # get a list that we can tamper with
+                #    if timenow & (1<<11) > 0: # bit 11 modify a whole byte
+                #        if timenow & (1<<12) > 0: # bit 12 set bits
+                #            candatalist[timenow & 7] |= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
+                #        else:                     # clear bits
+                #            candatalist[timenow & 7] &= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
+                #    else: # modify just one bit
+                #        if timenow & (1<<12) > 0: # bit 12 set bit
+                #            candatalist[timenow & 7] |= 1 << ((timenow >> 3) & 7) # set a bit
+                #        else:
+                #            candatalist[timenow & 7] &= 255 - (1 << ((timenow >> 3) & 7)) # clear a bit
+
+                #    candata=bytes(candatalist) # struct.pack needs a bytes() which is immutable
+                #    print("modifying according to "+str(timenow)+" at time "+str(time.time()))
+
+                #if display:   
+                #    for b in range(DLC):
+                #        candata_string += " {:02X}".format(candata[b])
+                #    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
 
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
 
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
+    starttime = int(time.time()) # when we actually began
+    logfile = open(str(starttime)+'.mitmlog','w')
+    logfile.write('logfile starting at '+str(time.time())+'\n')
+    logfile.flush()
     bridge.run()
 '''
 https://github.com/torvalds/linux/blob/master/include/uapi/linux/can/error.h
