@@ -260,6 +260,7 @@ if __name__ == '__main__': #       can1=vehicle         can0=BMS
     logfile = open(str(starttime)+'.mitmlog','w')
     logfile.write('logfile starting at '+str(time.time())+'\n')
     logfile.flush()
+    os.system('kill $(pgrep -f \'tail.*mitmlog\')') # restart mitmlogwatch with the new file
     bridge.run()
 '''
 https://github.com/torvalds/linux/blob/master/include/uapi/linux/can/error.h
