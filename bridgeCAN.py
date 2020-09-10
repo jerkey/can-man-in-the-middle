@@ -226,10 +226,18 @@ class CanBridge():
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
                         if canID == 0x14FF4064:
                             candatalist = list(candata) # get a list that we can tamper with
-                            candatalist[2] = 0x02
-                            candatalist[7] |= 0b00011000
-                            candatalist[3] = 0x02
-                            candatalist[1] = 0x02
+                            uptime = time.time() - starttime
+                            if uptime > 1.2:
+                                candatalist[2] = 0x01
+                            if uptime > 2.4:
+                                candatalist[2] = 0x02
+                            if uptime > 3.0:
+                                candatalist[7] |= 0b00001000
+                            if uptime > 3.2:
+                                candatalist[3] = 0x02
+                            if uptime > 10:
+                                candatalist[1] = 0x02
+                                candatalist[7] |= 0b00011000
                             candata = bytes(candatalist)
 
                         if canID == 0x14FF4164:
