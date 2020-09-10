@@ -12,7 +12,9 @@ screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes
 screen.scrollok(True) # allow gcode to scroll screen
 
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
+whichid = 25 # which ID to tamper with, if 24 or lower
+whichbyte = 8 # 01234567 for which byte of the CAN message to bother, 8 for all bytes
+whichvalue = 0 # what value to replace the bothered bytes with
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -164,14 +166,14 @@ class CanBridge():
             #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
             #        logfile.flush()
 
-    def logsettings(self,timestamp):
-        for i in range(len(fuckwith)):
-            if fuckwith[i]:
-                logfile.write("1")
-            else:
-                logfile.write("0")
-        logfile.write(" "+str(timestamp)+'\n\r')
-        logfile.flush()
+    #def logsettings(self,timestamp):
+    #    for i in range(len(fuckwith)):
+    #        if fuckwith[i]:
+    #            logfile.write("1")
+    #        else:
+    #            logfile.write("0")
+    #    logfile.write(" "+str(timestamp)+'\n\r')
+    #    logfile.flush()
 
     def run(self, display=True):
         global fuckwith # access the message filter array
@@ -223,7 +225,7 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 if canID in ids:
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-                        candata = bytes([50,50,50,50,50,50,50,50]) # zero this message
+                        candata = bytes([65,65,65,65,65,65,65,65]) # zero this message
 
 
                 #candata_string = ""
