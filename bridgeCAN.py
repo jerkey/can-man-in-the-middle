@@ -282,7 +282,7 @@ class CanBridge():
                             candata = bytes(candatalist)
 
                         if canID == 0x14FF5664: # 5564 doesn't need changed
-                            candata = bytes([0x2B,0x83,0x04,0x2A,0x83,0x05,0x2B,0x03])
+                            candata = bytes([0x00,0x83,0x04,0x11,0x83,0x05,0x22,0x03]) # highest 3.8, lowest 3.9
 
                         if canID == 0x14FF5864: # 5764 doesn't exist
                             candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
