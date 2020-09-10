@@ -12,7 +12,7 @@ screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes
 screen.scrollok(True) # allow gcode to scroll screen
 
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False]
+fuckwith = [ True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, False, True, True, True, True, True, True, True, False, False]
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -223,7 +223,73 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 if canID in ids:
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-                        candata = bytes([50,50,50,50,50,50,50,50]) # zero this message
+                        if canID == 0x14FF4064:
+                            candatalist = list(candata) # get a list that we can tamper with
+                            candatalist[2] = 0x02
+                            candatalist[7] |= 0b00011000
+                            candatalist[3] = 0x02
+                            candatalist[1] = 0x02
+                            candata = bytes(candatalist)
+
+                        if canID == 0x14FF4164:
+                            candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
+
+                        if canID == 0x14FF4264:
+                            candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
+
+                        if canID == 0x14FF4364:
+                            candata = bytes([0xA9,0x0A,0xA9,0x0A,0x00,0xA9,0x02,0x00])
+
+                        if canID == 0x14FF4464:
+                            candata = bytes([0x2B,0x87,0x05,0x2A,0x87,0x06,0x2A,0x03])
+
+                        if canID == 0x14FF4564:
+                            candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
+
+                        if canID == 0x14FF4664:
+                            candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
+
+                        if canID == 0x14FF4764:
+                            candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
+
+                        if canID == 0x14FF4864:
+                            candata = bytes([0xB0,0x04,0x88,0x01,0x83,0x01,0x7F,0x01])
+
+                        if canID == 0x14FF4964:
+                            candata = bytes([0xCB,0x00,0x45,0x00,0x45,0x00,0x42,0x00])
+
+                        if canID == 0x14FF5164: # skipped 5064, no changes needed, it's ids[0x11]
+                            candata = bytes([0x91,0x00,0xCA,0x30,0x01,0x93,0x00,0x00])
+
+                        if canID == 0x14FF5264:
+                            candata = bytes([0xA9,0x02,0xA9,0x02,0x00,0xA9,0x02,0x00])
+
+                        if canID == 0x14FF5364:
+                            candata = bytes([0xB1,0x07,0x00,0xB1,0x07,0x00,0xB1,0x03])
+
+                        if canID == 0x14FF5464: # this one alternates between two messages
+                            candatalist = list(candata) # get a list that we can tamper with
+                            candatalist[5] = 0
+                            candata = bytes(candatalist)
+
+                        if canID == 0x14FF5664: # 5564 doesn't need changed
+                            candata = bytes([0x2B,0x83,0x04,0x2A,0x83,0x05,0x2B,0x03])
+
+                        if canID == 0x14FF5864: # 5764 doesn't exist
+                            candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
+
+                        if canID == 0x18FF5764: # 5564 doesn't need changed
+                            candatalist = list(candata) # get a list that we can tamper with
+                            if candatalist[0] == 0x66:
+                                candatalist[5] = 0x00
+                                candatalist[6] = 0xE3
+                            candata = bytes(candatalist)
+
+                        if canID == 0x18FF5964:
+                            candata = bytes([0x66,0x00,0x00,0x00,0x00,0x00,0x00,0x00])
+
+                        if canID == 0x18FF9FF3:
+                            candata = bytes([0xDC,0x8D,0x32,0xFA,0xE3,0xD5,0x7D,0x01])
 
 
                 #candata_string = ""
@@ -256,8 +322,8 @@ class CanBridge():
 
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=250000,bitrate_to=250000) # bitrates are not implemented
-    starttime = int(time.time()) # when we actually began
-    logfile = open(str(starttime)+'.mitmlog','w')
+    starttime = time.time() # when we actually began
+    logfile = open(str(int(starttime))+'.mitmlog','w')
     logfile.write('logfile starting at '+str(time.time())+'\n')
     logfile.flush()
     os.system('kill $(pgrep -f \'tail.*mitmlog\')') # restart mitmlogwatch with the new file
