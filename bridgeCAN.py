@@ -11,8 +11,9 @@ screen.refresh()
 screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes-python-curses-program-to-exit
 screen.scrollok(True) # allow gcode to scroll screen
 
+# letter a          b          c          d          e          f          g          h          i          j          k          l          m          n          o          p          q          r          s          t          u          v          w          x          y
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, False, True, True, True, True, True, True, True, False, False]
+fuckwith = [ True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,      True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,     False]
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -186,8 +187,8 @@ class CanBridge():
                         logfile.write("pass {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
                         fuckwith[(key & 0b11011111) - 65 ] = False;
                     else: # uppercase
-                        sprnt("ZERO {:08X}".format(ids[(key & 0b11011111) - 65 ]))
-                        logfile.write("ZERO {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
+                        sprnt("FORCE {:08X}".format(ids[(key & 0b11011111) - 65 ]))
+                        logfile.write("FORCE {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
                         fuckwith[(key & 0b11011111) - 65 ] = True;
                     self.logsettings(int(time.time()))
 
