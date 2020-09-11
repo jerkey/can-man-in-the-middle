@@ -321,8 +321,10 @@ canstarttime = 0 # this gets set to present time upon the first CAN message arri
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can0',interface_to='can1',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
-    logfile = open(str(int(starttime))+'.mitmlog','w')
+    logfilename = str(int(starttime))+'.mitmlog'
+    logfile = open(logfilename,'w')
     logfile.write('logfile starting at '+str(time.time())+'\n')
+    sprnt('logfile: '+logfilename)
     logfile.flush()
     os.system('kill $(pgrep -f \'tail.*mitmlog\')') # restart mitmlogwatch with the new file
     bridge.run()
