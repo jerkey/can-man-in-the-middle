@@ -11,6 +11,7 @@ screen.refresh()
 screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes-python-curses-program-to-exit
 screen.scrollok(True) # allow gcode to scroll screen
 
+startupstate = 9 # 9 TO BE AUTOMATIC, 0 FOR MANUAL user presses 0,1,2,3,4 etc to control startup state
 # letter a          b          c          d          e          f          g          h          i          j          k          l          m          n          o          p          q          r          s          t          u          v          w          x          y
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
 fuckwith = [ True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,      True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,     False]
@@ -176,7 +177,7 @@ class CanBridge():
         logfile.flush()
 
     def run(self, display=True):
-        global fuckwith, canstarttime # access the message filter array
+        global fuckwith, canstarttime, startupstate # access the message filter array
         while True:
             self.checkMotorSignals() # if messages heading from vehicle, check them
             key = screen.getch() # this is blocking unless you do .nodelay(1)
@@ -190,6 +191,11 @@ class CanBridge():
                         sprnt("FORCE {:08X}".format(ids[(key & 0b11011111) - 65 ]))
                         logfile.write("FORCE {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
                         fuckwith[(key & 0b11011111) - 65 ] = True;
+                    self.logsettings(int(time.time()))
+                elif key > 47 and key < 58: # key is a number
+                    startupstate = key - 48
+                    sprnt("startupstate = {}".format(startupstate))
+                    logfile.write("startupstate = {} ".format(startupstate))
                     self.logsettings(int(time.time()))
 
             raw_bytes_from = self.canSocket_to.recv(16) # receive message from can0
@@ -225,7 +231,12 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 if canID in ids:
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-                        uptime = time.time() - canstarttime  # how long since the first CAN message
+                        if startupstate == 9: uptime = time.time() - canstarttime  # how long since the first CAN message
+                        if startupstate == 0: uptime = 0
+                        if startupstate == 1: uptime = 1.5
+                        if startupstate == 2: uptime = 2.5
+                        if startupstate == 3: uptime = 3.5
+                        if startupstate == 4: uptime = 30
                         if canID == 0x14FF4064: # heartbeat CANmessage
                             candatalist = list(candata) # get a list that we can tamper with
                             if uptime > 1.2:
