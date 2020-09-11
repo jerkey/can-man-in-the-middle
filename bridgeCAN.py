@@ -225,36 +225,44 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 if canID in ids:
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-                        if canID == 0x14FF4064:
+                        uptime = time.time() - canstarttime  # how long since the first CAN message
+                        if canID == 0x14FF4064: # heartbeat CANmessage
                             candatalist = list(candata) # get a list that we can tamper with
-                            uptime = time.time() - starttime
                             if uptime > 1.2:
                                 candatalist[2] = 0x01
-                            if uptime > 2.4:
+                            else: # at startup
+                                candata = bytes([0,0,0,0,0,0,0,0])
+                            if uptime > 2.3:
                                 candatalist[2] = 0x02
-                            if uptime > 3.0:
+                            if uptime > 2.9:
                                 candatalist[7] |= 0b00001000
-                            if uptime > 3.2:
+                            if uptime > 3.1:
                                 candatalist[3] = 0x02
-                            if uptime > 10:
+                            if uptime > 10: # actually it's 70.2 seconds in 20200831.171* and like 4.5 seconds in 20200831.173*
                                 candatalist[1] = 0x02
                                 candatalist[7] |= 0b00011000
                             candata = bytes(candatalist)
 
-                        if canID == 0x14FF4164:
+                        if canID == 0x14FF4164: #  high, low, and average cell temperature
                             candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
 
-                        if canID == 0x14FF4264:
+                        if canID == 0x14FF4264: #  efficiency meter
                             candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
 
-                        if canID == 0x14FF4364:
-                            candata = bytes([0xA9,0x0A,0xA9,0x0A,0x00,0xA9,0x02,0x00])
+                        if canID == 0x14FF4364: #  voltage (we want to pass this through mostly)
+                            candatalist = list(candata) # get a list that we can tamper with
+                            candatalist[1] |= 0x08
+                            candatalist[3] |= 0x08
+                            candata = bytes(candatalist)
 
                         if canID == 0x14FF4464:
-                            candata = bytes([0x2B,0x87,0x05,0x2A,0x87,0x06,0x2A,0x03])
+                            if uptime > 1.0:
+                                candata = bytes([0x2B,0x87,0x05,0x2A,0x87,0x06,0x2A,0x03])
+                            else: # at startup
+                                candata = bytes([0,0,0,0,0,0,0,0x54])
 
                         if canID == 0x14FF4564:
-                            candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
+                            candata = bytes([0x80,0x80,0x01,0x80,0x01,0x18,0x3D,0x00])
 
                         if canID == 0x14FF4664:
                             candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
@@ -283,10 +291,15 @@ class CanBridge():
                             candata = bytes(candatalist)
 
                         if canID == 0x14FF5664: # 5564 doesn't need changed
-                            candata = bytes([0x00,0x83,0x04,0x11,0x83,0x05,0x22,0x03]) # highest 3.8, lowest 3.9
+                            candata = bytes([0xBC,0x82,0x04,0xBC,0x82,0x05,0xBC,0x02]) # 595/168=3.54v
 
                         if canID == 0x14FF5864: # 5764 doesn't exist
-                            candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
+                            if uptime > 0.2:
+                                candata = bytes([0,3,0,0,0,0,0,0])
+                            else: # at startup
+                                candata = bytes([0,0,0,0,0,0,0,0])
+                            if uptime > 2.3:
+                                candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
 
                         if canID == 0x18FF5764: # 5564 doesn't need changed
                             candatalist = list(candata) # get a list that we can tamper with
