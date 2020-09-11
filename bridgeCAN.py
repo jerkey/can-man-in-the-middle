@@ -140,10 +140,11 @@ class CanBridge():
         self.canSocket_to.settimeout(None)
         self.canSocket_from.settimeout(0.0) # non-blocking with 0.0 timeout
 
-    def checkMotorSignals(self,timestamp):
+    def checkMotorSignals(self):
         raw_bytes_to = self.canSocket_from.recv(16)
         if raw_bytes_to != None: # if a CAN message was waiting
-            self.canSocket_to.send(raw_bytes_to) # sending from 1 to 0
+            self.canSocket_to.send(raw_bytes_to)
+            if time.time() % 0.01 > 0.002: return # ONLY RUN THIS STUFF 20% OF THE TIME
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
             canID = rawID & 0x1FFFFFFF
             candata_string = ""
@@ -151,13 +152,13 @@ class CanBridge():
                 if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
                     for b in range(DLC):
                         candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X}{} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
+                    logfile.write("{} {:08X} {} ".format(int(time.time()), canID, candata_string)+'\n')
                     logfile.flush()
             if canID == 0x041:
                 if candata[0] != 0x08:
                     for b in range(DLC):
                         candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
+                    logfile.write("{} {:08X} {} ".format(int(time.time()), canID, candata_string)+'\n')
                     logfile.flush()
             #if timestamp % 10 == 0: # every 20 seconds, just for troubleshooting
             #        for b in range(DLC):
@@ -175,10 +176,9 @@ class CanBridge():
         logfile.flush()
 
     def run(self, display=True):
-        global fuckwith # access the message filter array
+        global fuckwith, canstarttime # access the message filter array
         while True:
-            timenow = int((time.time()) / 2) & ((1<<13) - 1) # rolling counter, 13 bits, 4.55 hours
-            self.checkMotorSignals(timenow) # if messages heading from vehicle, check them
+            self.checkMotorSignals() # if messages heading from vehicle, check them
             key = screen.getch() # this is blocking unless you do .nodelay(1)
             if key != -1: # a key was pressed
                 if key & 0b11011111 >= ord('A') and key & 0b11011111 <= ord('Z'):
@@ -193,6 +193,7 @@ class CanBridge():
                     self.logsettings(int(time.time()))
 
             raw_bytes_from = self.canSocket_to.recv(16) # receive message from can0
+            if canstarttime == 0: canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
@@ -300,35 +301,10 @@ class CanBridge():
                         if canID == 0x18FF9FF3:
                             candata = bytes([0xDC,0x8D,0x32,0xFA,0xE3,0xD5,0x7D,0x01])
 
-
-                #candata_string = ""
-                #for b in range(DLC):
-                #    candata_string += " {:02X}".format(candata[b])
-                ##if canID == 14FF4064 : # 10hz # heartbeat counter
-                #if canID == ids[(timenow >> 6) % 25]: # bits 6-10 choose which canID we care about
-                #    candatalist = list(candata) # get a list that we can tamper with
-                #    if timenow & (1<<11) > 0: # bit 11 modify a whole byte
-                #        if timenow & (1<<12) > 0: # bit 12 set bits
-                #            candatalist[timenow & 7] |= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
-                #        else:                     # clear bits
-                #            candatalist[timenow & 7] &= (255 >> ((timenow >> 3) & 7)) # all bits or just lower ones
-                #    else: # modify just one bit
-                #        if timenow & (1<<12) > 0: # bit 12 set bit
-                #            candatalist[timenow & 7] |= 1 << ((timenow >> 3) & 7) # set a bit
-                #        else:
-                #            candatalist[timenow & 7] &= 255 - (1 << ((timenow >> 3) & 7)) # clear a bit
-
-                #    candata=bytes(candatalist) # struct.pack needs a bytes() which is immutable
-                #    print("modifying according to "+str(timenow)+" at time "+str(time.time()))
-
-                #if display:   
-                #    for b in range(DLC):
-                #        candata_string += " {:02X}".format(candata[b])
-                #    print("{:08X} {}".format(canID, candata_string)) # +hex(candata[0])+hex(candata[1])+hex(candata[2])+hex(candata[3])+hex(candata[4])+hex(candata[5])+hex(candata[6])+hex(candata[7]))
-
             self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
             # self.canSocket_from.send(raw_bytes_from)
 
+canstarttime = 0 # this gets set to present time upon the first CAN message arrival
 if __name__ == '__main__': #       can1=vehicle         can0=BMS
     bridge = CanBridge(interface_from='can0',interface_to='can1',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
