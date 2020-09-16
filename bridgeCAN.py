@@ -264,10 +264,20 @@ class CanBridge():
                             candata = bytes(candatalist)
 
                         if canID == 0x14FF4164: #  high, low, and average cell temperature
-                            candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
+                            if uptime > 1.2:
+                                candata = bytes([0x00,0x00,0x10,0xA0,0x00,0x10,0x28,0x01])
+                            else:
+                                candata = bytes([0x28,0x00,0x10,0x28,0x00,0x10,0x28,0x01])
+                            if uptime > 2.0:
+                                candata = bytes([0x00,0x60,0x15,0xA0,0x00,0x14,0x28,0x01])
+                            if uptime > 10.0:
+                                candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
 
                         if canID == 0x14FF4264: #  efficiency meter
-                            candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
+                            if uptime > 2.2:
+                                candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
+                            else:
+                                candata = bytes([0x00,0x7D,0xF4,0x01,0xF4,0x01,0x00,0x00])
 
                         if canID == 0x14FF4364: #  voltage (we want to pass this through mostly)
                             candatalist = list(candata) # get a list that we can tamper with
@@ -281,7 +291,7 @@ class CanBridge():
                             else: # at startup
                                 candata = bytes([0,0,0,0,0,0,0,0x54])
 
-                        if canID == 0x14FF4564:
+                        if canID == 0x14FF4564: # SOC
                             candata = bytes([0x80,0x80,0x01,0x80,0x01,0x18,0x3D,0x00])
 
                         if canID == 0x14FF4664:
