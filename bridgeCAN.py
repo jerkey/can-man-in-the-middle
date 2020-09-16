@@ -14,7 +14,7 @@ screen.scrollok(True) # allow gcode to scroll screen
 startupstate = 9 # 9 TO BE AUTOMATIC, 0 FOR MANUAL user presses 0,1,2,3,4 etc to control startup state
 # letter a          b          c          d          e          f          g          h          i          j          k          l          m          n          o          p          q          r          s          t          u          v          w          x          y
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,      True,      True,      True,     False,      True,      True,      True,      True,      True,      True,      True,     False,     False]
+fuckwith = [ True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True]
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -199,7 +199,9 @@ class CanBridge():
                     self.logsettings(int(time.time()))
 
             raw_bytes_from = self.canSocket_to.recv(16) # receive message from can0
-            if canstarttime == 0: canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
+            if canstarttime == 0:
+                canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
+                sprnt("canstarttime at {}".format(time.time()))
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
@@ -231,12 +233,19 @@ class CanBridge():
                 # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
                 if canID in ids:
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-                        if startupstate == 9: uptime = time.time() - canstarttime  # how long since the first CAN message
+
+                        if startupstate == 9:
+                            uptime = time.time() - canstarttime  # how long since the first CAN message
+                            screen.addstr(12,12,str(int(uptime)))
                         if startupstate == 0: uptime = 0
                         if startupstate == 1: uptime = 1.5
                         if startupstate == 2: uptime = 2.5
                         if startupstate == 3: uptime = 3.5
                         if startupstate == 4: uptime = 30
+                        if startupstate == 8:
+                            startupstate = 9 # go back to uptime mode
+                            canstarttime = time.time() # restart timed cycle
+
                         if canID == 0x14FF4064: # heartbeat CANmessage
                             candatalist = list(candata) # get a list that we can tamper with
                             if uptime > 1.2:
@@ -329,7 +338,7 @@ class CanBridge():
             # self.canSocket_from.send(raw_bytes_from)
 
 canstarttime = 0 # this gets set to present time upon the first CAN message arrival
-if __name__ == '__main__': #       can1=vehicle         can0=BMS
+if __name__ == '__main__': #           vehicle             BMS
     bridge = CanBridge(interface_from='can0',interface_to='can1',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
     logfilename = str(int(starttime))+'.mitmlog'
