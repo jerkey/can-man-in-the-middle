@@ -6,7 +6,7 @@ import curses
 import time
 
 screen = curses.initscr()
-screen.addstr(0,10,"Hit 'q' to quit")
+screen.addstr(0,10,"Hit 'z' to quit")
 screen.refresh()
 screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes-python-curses-program-to-exit
 screen.scrollok(True) # allow gcode to scroll screen
@@ -15,6 +15,10 @@ startupstate = 9 # 9 TO BE AUTOMATIC, 0 FOR MANUAL user presses 0,1,2,3,4 etc to
 # letter a          b          c          d          e          f          g          h          i          j          k          l          m          n          o          p          q          r          s          t          u          v          w          x          y
 ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
 fuckwith = [ True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True]
+
+BMSrequest = False          # what the bus is asking for
+ContactorsState = False     # whether we've ordered the contactors closed/true/hot/powered or not
+ContactorOrderedTrueTime = 0# what time we told them to close (so we know how long to wait
 
 def sprnt(texttoprnt):
     screen.addstr(texttoprnt+'\n\r')
@@ -142,19 +146,46 @@ class CanBridge():
         self.canSocket_from.settimeout(0.0) # non-blocking with 0.0 timeout
 
     def checkMotorSignals(self):
+        global BMSrequest, ContactorsState, ContactorOrderedTrueTime
         raw_bytes_to = self.canSocket_from.recv(16)
         if raw_bytes_to != None: # if a CAN message was waiting
             self.canSocket_to.send(raw_bytes_to)
-            if time.time() % 0.01 > 0.002: return # ONLY RUN THIS STUFF 20% OF THE TIME
+            if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
             canID = rawID & 0x1FFFFFFF
             candata_string = ""
+            if canID == 0x14FF4049:
+                if candata[1] > 0:
+                    if BMSrequest == False:
+                        self.contactorControl(8675309) # sengage contactors
+                        sprnt("Contactors START Precharging")
+                        ContactorOrderedTrueTime = int(time.time())
+                        for b in range(DLC):
+                            candata_string += " {:02X}".format(candata[b])
+                        logfile.write("{} {} {:08X} {} ".format(int(time.time()), ContactorOrderedTrueTime, canID, candata_string)+'\n')
+                        logfile.flush()
+                    BMSrequest = True
+                    if int(time.time()) - ContactorOrderedTrueTime > 3: 
+                        #sprnt("ContactorOrderedTrueTime = {}".format(ContactorOrderedTrueTime))
+                        if ContactorsState == False:
+                            sprnt("Contactors Finished Precharging")
+                        ContactorsState = True
+                else:
+                    if BMSrequest == True:
+                        self.contactorControl(123123) # disengage contactors
+                        sprnt("Contactors DISENGAGED")
+                    BMSrequest = False
+                    ContactorsState = False
+                sprnt("14FF4049[1]="+str(candata[1]))
             if canID == 0x040:
                 if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
                     for b in range(DLC):
                         candata_string += " {:02X}".format(candata[b])
                     logfile.write("{} {:08X} {} ".format(int(time.time()), canID, candata_string)+'\n')
                     logfile.flush()
+            if canID == 0x440:
+                logfile.write("{} voltage: {} ".format(int(time.time()), str(((candata[2] & 7) << 8) + candata[1]))+'\n')
+                logfile.flush()
             if canID == 0x041:
                 if candata[0] != 0x08:
                     for b in range(DLC):
@@ -176,11 +207,18 @@ class CanBridge():
         logfile.write(" "+str(timestamp)+'\n\r')
         logfile.flush()
 
+    def contactorControl(self, instruction):
+        os.system('/home/debian/bin/contactorcontrol {}'.format(instruction)) # restart mitmlogwatch with the new file
+
     def run(self, display=True):
         global fuckwith, canstarttime, startupstate # access the message filter array
         while True:
             self.checkMotorSignals() # if messages heading from vehicle, check them
             key = screen.getch() # this is blocking unless you do .nodelay(1)
+            if key == ord('z'):
+                self.contactorControl(123123) # disengage contactors
+                curses.endwin()
+                exit()
             if key != -1: # a key was pressed
                 if key & 0b11011111 >= ord('A') and key & 0b11011111 <= ord('Z'):
                     if key & 0b00100000 > 0: # lowercase
@@ -235,19 +273,20 @@ class CanBridge():
                     if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
 
                         if startupstate == 9:
-                            uptime = time.time() - canstarttime  # how long since the first CAN message
-                            screen.addstr(12,12,str(int(uptime)))
+                            uptime = time.time() - canstarttime  # how long since the first CAN message THIS IS THE DEFAULT SETTING
+                            #screen.addstr(12,12,str(int(uptime)))
                         if startupstate == 0: uptime = 0
                         if startupstate == 1: uptime = 1.5
                         if startupstate == 2: uptime = 2.5
                         if startupstate == 3: uptime = 3.5
                         if startupstate == 4: uptime = 30
                         if startupstate == 8:
-                            startupstate = 9 # go back to uptime mode
+                            startupstate = 9 # go back to uptime mode THIS IS THE DEFAULT SETTING
                             canstarttime = time.time() # restart timed cycle
 
                         if canID == 0x14FF4064: # heartbeat CANmessage
                             candatalist = list(candata) # get a list that we can tamper with
+                            candatalist[7] &= 0b00000111 # clear the error bit at bit 5?
                             if uptime > 1.2:
                                 candatalist[2] = 0x01
                             else: # at startup
@@ -258,7 +297,7 @@ class CanBridge():
                                 candatalist[7] |= 0b00001000
                             if uptime > 3.1:
                                 candatalist[3] = 0x02
-                            if uptime > 10: # actually it's 70.2 seconds in 20200831.171* and like 4.5 seconds in 20200831.173*
+                            if ContactorsState == True:
                                 candatalist[1] = 0x02
                                 candatalist[7] |= 0b00011000
                             candata = bytes(candatalist)
@@ -349,7 +388,7 @@ class CanBridge():
 
 canstarttime = 0 # this gets set to present time upon the first CAN message arrival
 if __name__ == '__main__': #           vehicle             BMS
-    bridge = CanBridge(interface_from='can0',interface_to='can1',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
+    bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
     logfilename = str(int(starttime))+'.mitmlog'
     logfile = open(logfilename,'w')
