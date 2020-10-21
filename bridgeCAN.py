@@ -150,7 +150,7 @@ class CanBridge():
         raw_bytes_to = self.canSocket_from.recv(16)
         if raw_bytes_to != None: # if a CAN message was waiting
             self.canSocket_to.send(raw_bytes_to)
-            if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
+            #if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
             canID = rawID & 0x1FFFFFFF
             candata_string = ""
@@ -176,7 +176,7 @@ class CanBridge():
                         sprnt("Contactors DISENGAGED")
                     BMSrequest = False
                     ContactorsState = False
-                sprnt("14FF4049[1]="+str(candata[1]))
+                #sprnt("14FF4049[1]="+str(candata[1]))
             if canID == 0x040:
                 if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
                     for b in range(DLC):
