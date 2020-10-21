@@ -38,24 +38,24 @@ CAN_SFF_MASK = 0x000007FF # /* standard frame format (SFF) */
 CAN_EFF_MASK = 0x1FFFFFFF # /* extended frame format (EFF) */
 CAN_ERR_MASK = 0x1FFFFFFF # /* omit EFF, RTR, ERR flags */
 
-# 
+#
 # Controller Area Network Identifier structure
-# 
+#
 # bit 0-28 : CAN identifier (11/29 bit)
 # bit 29   : error message frame flag (0 = data frame, 1 = error message)
 # bit 30   : remote transmission request flag (1 = rtr frame)
 # bit 31   : frame format flag (0 = standard 11 bit, 1 = extended 29 bit)
-# 
+#
 
-# 
+#
 # Controller Area Network Error Message Frame Mask structure
-# 
+#
 # bit 0-28 : error class mask (see include/linux/can/error.h)
 # bit 29-31    : set to zero
-# 
+#
 
 
-# 
+#
 # struct can_frame - basic CAN frame structure
 # @can_id:  CAN ID of the frame and CAN_*_FLAG flags, see canid_t definition
 # @can_dlc: frame payload length in byte (0 .. 8) aka data length code
@@ -65,7 +65,7 @@ CAN_ERR_MASK = 0x1FFFFFFF # /* omit EFF, RTR, ERR flags */
 # @__res0:  reserved / padding
 # @__res1:  reserved / padding
 # @data:    CAN frame payload (up to 8 byte)
-# 
+#
 
 # /* particular protocols of the protocol family PF_CAN */
 # CAN_RAW     1 /* RAW sockets */
@@ -78,80 +78,83 @@ CAN_ERR_MASK = 0x1FFFFFFF # /* omit EFF, RTR, ERR flags */
 
 
 class CanBridge():
-    def __init__(self, interface_from, interface_to,bitrate_to,bitrate_from):
+    def __init__(self, interface_vehicle, interface_BMS,bitrate_to,bitrate_from):
         #set CAN bit rates. Must have super user privilages.
-        #os.system('sudo ip link set {} down'.format(interface_from))
-        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_from, bitrate_from))
-        #os.system('sudo ip link set {} up'.format(interface_from))
-        #os.system('sudo ip link set {} down'.format(interface_to))
-        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_to, bitrate_to))
-        #os.system('sudo ip link set {} up'.format(interface_to))
+        #os.system('sudo ip link set {} down'.format(interface_vehicle))
+        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_vehicle, bitrate_from))
+        #os.system('sudo ip link set {} up'.format(interface_vehicle))
+        #os.system('sudo ip link set {} down'.format(interface_BMS))
+        #os.system('sudo ip link set {} type can bitrate {}'.format(interface_BMS, bitrate_to))
+        #os.system('sudo ip link set {} up'.format(interface_BMS))
         # os.system('can.sh pass') # open relay for mitm
 
-        self.canSocket_to = socket.socket(socket.PF_CAN, 
-                                          socket.SOCK_RAW, 
+        self.canSocket_BMS = socket.socket(socket.PF_CAN,
+                                          socket.SOCK_RAW,
                                           socket.CAN_RAW)
-        self.canSocket_from = socket.socket(socket.PF_CAN, 
-                                            socket.SOCK_RAW, 
+        self.canSocket_vehicle = socket.socket(socket.PF_CAN,
+                                            socket.SOCK_RAW,
                                             socket.CAN_RAW)
         # Following the RAW Socket Options at
         # https://github.com/torvalds/linux/blob/master/Documentation/networking/can.rst
         # Set receive filters
         # filter passes when <received_can_id> & mask == can_id & mask
-        # by setting the mask to zero, all messages pass. 
+        # by setting the mask to zero, all messages pass.
         can_id = 0
         can_mask = 0
         # Alternatively, to filter out J1939 Cruise Control/Vehicle Speed messages
         # can_id = 0x00FEF100
         # can_mask = 0x00FFFF00 #Just looks at the PGN of 0xFEF1 = 65265
         can_filter = struct.pack('LL',can_id,can_mask)
-        
-        self.canSocket_to.setsockopt(socket.SOL_CAN_RAW, 
+
+        self.canSocket_BMS.setsockopt(socket.SOL_CAN_RAW,
                                      socket.CAN_RAW_FILTER,
                                      can_filter)
-        ret_val = self.canSocket_to.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
+        ret_val = self.canSocket_BMS.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
         sprnt("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
-        self.canSocket_from.setsockopt(socket.SOL_CAN_RAW, 
+        self.canSocket_vehicle.setsockopt(socket.SOL_CAN_RAW,
                                      socket.CAN_RAW_FILTER,
                                      can_filter)
-        ret_val = self.canSocket_from.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
+        ret_val = self.canSocket_vehicle.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_FILTER)
         sprnt("Socket Option for CAN_RAW_FILTER is set to {}".format(ret_val))
-        
+
         # Set the system to receive every possible error
         can_error_filter = struct.pack('L',CAN_ERR_MASK)
         # Alternatively, we can set specific errors where the errors are enumerated
         # in the defines of /linux/can/error.h
         # can_error_filter = CAN_ERR_TX_TIMEOUT | CAN_ERR_BUSOFF
-        self.canSocket_to.setsockopt(socket.SOL_CAN_RAW, 
+        self.canSocket_BMS.setsockopt(socket.SOL_CAN_RAW,
                                      socket.CAN_RAW_ERR_FILTER,
                                      can_error_filter)
-        ret_val = self.canSocket_to.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
+        ret_val = self.canSocket_BMS.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
         sprnt("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
-        
-        self.canSocket_from.setsockopt(socket.SOL_CAN_RAW, 
+
+        self.canSocket_vehicle.setsockopt(socket.SOL_CAN_RAW,
                                      socket.CAN_RAW_ERR_FILTER,
                                      can_error_filter)
-        ret_val = self.canSocket_from.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
+        ret_val = self.canSocket_vehicle.getsockopt(socket.SOL_CAN_RAW, socket.CAN_RAW_ERR_FILTER)
         sprnt("Socket Option for CAN_RAW_ERR_FILTER is set to {}".format(ret_val))
-        
-        self.interface_from = interface_from
-        self.interface_to = interface_to
-        try: 
-            self.canSocket_to.bind((interface_to,))
-            self.canSocket_from.bind((interface_from,))
-        except OSError: 
+
+        self.interface_vehicle = interface_vehicle
+        self.interface_BMS = interface_BMS
+        try:
+            self.canSocket_BMS.bind((interface_BMS,))
+            self.canSocket_vehicle.bind((interface_vehicle,))
+        except OSError:
             sprnt("Could not bind to SocketCAN interfaces")
         #put the sockets in blocking mode.
-        self.canSocket_to.settimeout(None)
-        self.canSocket_from.settimeout(0.0) # non-blocking with 0.0 timeout
+        self.canSocket_BMS.settimeout(None)
+        self.canSocket_vehicle.settimeout(0.0) # non-blocking with 0.0 timeout
 
     def checkMotorSignals(self):
-        global BMSrequest, ContactorsState, ContactorOrderedTrueTime
-        raw_bytes_to = self.canSocket_from.recv(16)
-        if raw_bytes_to != None: # if a CAN message was waiting
-            self.canSocket_to.send(raw_bytes_to)
+        global BMSrequest, ContactorsState, ContactorOrderedTrueTime, canstarttime
+        raw_bytes_vehicle = self.canSocket_vehicle.recv(16)
+        if raw_bytes_vehicle != None: # if a CAN message was waiting
+            if canstarttime == 0:
+                canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
+                sprnt("canstarttime at {}".format(time.time()))
+            self.canSocket_BMS.send(raw_bytes_vehicle)
             #if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
-            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_to)
+            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_vehicle)
             canID = rawID & 0x1FFFFFFF
             candata_string = ""
             if canID == 0x14FF4049:
@@ -165,7 +168,7 @@ class CanBridge():
                         logfile.write("{} {} {:08X} {} ".format(int(time.time()), ContactorOrderedTrueTime, canID, candata_string)+'\n')
                         logfile.flush()
                     BMSrequest = True
-                    if int(time.time()) - ContactorOrderedTrueTime > 3: 
+                    if int(time.time()) - ContactorOrderedTrueTime > 3:
                         #sprnt("ContactorOrderedTrueTime = {}".format(ContactorOrderedTrueTime))
                         if ContactorsState == False:
                             sprnt("Contactors Finished Precharging")
@@ -236,11 +239,8 @@ class CanBridge():
                     logfile.write("startupstate = {} ".format(startupstate))
                     self.logsettings(int(time.time()))
 
-            raw_bytes_from = self.canSocket_to.recv(16) # receive message from can0
-            if canstarttime == 0:
-                canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
-                sprnt("canstarttime at {}".format(time.time()))
-            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_from)
+            raw_bytes_BMS = self.canSocket_BMS.recv(16) # receive message from BMS
+            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_BMS)
             canID = rawID & 0x1FFFFFFF
             if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
                 sprnt("Found Error Frame.")
@@ -255,7 +255,7 @@ class CanBridge():
                 elif canID == 8:
                     sprnt("Protocol violations")
                 elif canID == 16:
-                    sprnt("Transceiver status") 
+                    sprnt("Transceiver status")
                 elif canID == 32:
                     sprnt("No Acknkowlegement on transmission")
                 elif canID == 64:
@@ -383,12 +383,12 @@ class CanBridge():
                         if canID == 0x18FF9FF3:
                             candata = bytes([0xDC,0x8D,0x32,0xFA,0xE3,0xD5,0x7D,0x01])
 
-            self.canSocket_from.send(struct.pack(canformat, rawID, DLC, candata))
-            # self.canSocket_from.send(raw_bytes_from)
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, DLC, candata))
+            # self.canSocket_vehicle.send(raw_bytes_BMS)
 
 canstarttime = 0 # this gets set to present time upon the first CAN message arrival
-if __name__ == '__main__': #           vehicle             BMS
-    bridge = CanBridge(interface_from='can1',interface_to='can0',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
+if __name__ == '__main__': #           vehicle                 BMS
+    bridge = CanBridge(interface_vehicle='can1',interface_BMS='can0',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
     logfilename = str(int(starttime))+'.mitmlog'
     logfile = open(logfilename,'w')
