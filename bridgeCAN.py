@@ -208,7 +208,7 @@ class CanBridge():
         logfile.flush()
 
     def contactorControl(self, instruction):
-        os.system('/home/debian/bin/contactorcontrol {}'.format(instruction)) # restart mitmlogwatch with the new file
+        os.system('/home/debian/bin/contactorcontrol {}'.format(str(instruction))) # restart mitmlogwatch with the new file
 
     def run(self, display=True):
         global fuckwith, canstarttime, startupstate # access the message filter array
