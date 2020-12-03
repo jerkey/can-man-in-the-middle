@@ -5,16 +5,20 @@ import os
 import curses
 import time
 
+XaltVoltage = 6 # placeholder for voltage reported by Xalt battery
+XaltHeartbeatCounter = 0 # gets incremented with each message, rolls over after 7
+
+canstarttime = 0.0 # this gets set to present time upon the first CAN message arrival
+
+last1Hz = 0.0
+last2Hz = 0.0
+last10Hz = 0.0
+
 screen = curses.initscr()
 screen.addstr(0,10,"Hit 'z' to quit")
 screen.refresh()
 screen.nodelay(1)  # https://stackoverflow.com/questions/14004835/nodelay-causes-python-curses-program-to-exit
 screen.scrollok(True) # allow gcode to scroll screen
-
-startupstate = 9 # 9 TO BE AUTOMATIC, 0 FOR MANUAL user presses 0,1,2,3,4 etc to control startup state
-# letter a          b          c          d          e          f          g          h          i          j          k          l          m          n          o          p          q          r          s          t          u          v          w          x          y
-ids = [0x14FF4064,0x14FF4164,0x14FF4264,0x14FF4364,0x14FF4464,0x14FF4564,0x14FF4664,0x14FF4764,0x14FF4864,0x14FF4964,0x14FF5064,0x14FF5164,0x14FF5264,0x14FF5364,0x14FF5464,0x14FF5564,0x14FF5664,0x14FF5864,0x18EEFF64,0x18FECA64,0x18FF5764,0x18FF5964,0x18FF9FF3,0x1CEBFF64,0x1CECFF64]
-fuckwith = [ True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True,      True]
 
 BMSrequest = False          # what the bus is asking for
 ContactorsState = False     # whether we've ordered the contactors closed/true/hot/powered or not
@@ -138,31 +142,35 @@ class CanBridge():
         self.interface_BMS = interface_BMS
         try:
             self.canSocket_BMS.bind((interface_BMS,))
+        except OSError:
+            sprnt("Could not bind to interface_BMS")
+            exit(8)
+        try:
             self.canSocket_vehicle.bind((interface_vehicle,))
         except OSError:
-            sprnt("Could not bind to SocketCAN interfaces")
-        #put the sockets in blocking mode.
-        self.canSocket_BMS.settimeout(None)
-        self.canSocket_vehicle.settimeout(0.0) # non-blocking with 0.0 timeout
+            sprnt("Could not bind to interface_vehicle")
+            exit(9)
+        # https://stackoverflow.com/questions/34371096/how-to-use-python-socket-settimeout-properly
+        self.canSocket_BMS.settimeout(None) # would be blocking with None
+        self.canSocket_vehicle.settimeout(None) # non-blocking with 0.0 timeout
 
-    def checkMotorSignals(self):
+    def handleVehicleMessages(self):
         global BMSrequest, ContactorsState, ContactorOrderedTrueTime, canstarttime
         raw_bytes_vehicle = self.canSocket_vehicle.recv(16)
         if raw_bytes_vehicle != None: # if a CAN message was waiting
+            screen.addstr('v')
             if canstarttime == 0:
                 canstarttime = time.time() # INITIALIZE WHEN THE FIRST CAN MESSAGE ARRIVES
                 sprnt("canstarttime at {}".format(time.time()))
-            self.canSocket_BMS.send(raw_bytes_vehicle)
-            #if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
             rawID,DLC,candata = struct.unpack(canformat,raw_bytes_vehicle)
             canID = rawID & 0x1FFFFFFF
-            candata_string = ""
             if canID == 0x14FF4049:
                 if candata[1] > 0:
-                    if BMSrequest == False:
-                        self.contactorControl(8675309) # sengage contactors
+                    if BMSrequest == False: # we need to start the transition to ON
+                        self.contactorControl(8675309) # engage contactors
                         sprnt("Contactors START Precharging")
                         ContactorOrderedTrueTime = int(time.time())
+                        candata_string = ""
                         for b in range(DLC):
                             candata_string += " {:02X}".format(candata[b])
                         logfile.write("{} {} {:08X} {} ".format(int(time.time()), ContactorOrderedTrueTime, canID, candata_string)+'\n')
@@ -171,7 +179,7 @@ class CanBridge():
                     if int(time.time()) - ContactorOrderedTrueTime > 3:
                         #sprnt("ContactorOrderedTrueTime = {}".format(ContactorOrderedTrueTime))
                         if ContactorsState == False:
-                            sprnt("Contactors Finished Precharging")
+                            sprnt("Contactors Probably Finished Precharging")
                         ContactorsState = True
                 else:
                     if BMSrequest == True:
@@ -180,43 +188,156 @@ class CanBridge():
                     BMSrequest = False
                     ContactorsState = False
                 #sprnt("14FF4049[1]="+str(candata[1]))
-            if canID == 0x040:
-                if candata[0] + (candata[1] & 0b10111111) + candata[2] + candata[3] > 0:
-                    for b in range(DLC):
-                        candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X} {} ".format(int(time.time()), canID, candata_string)+'\n')
-                    logfile.flush()
+            #if time.time() % 1.0 > 0.2: return # ONLY RUN THIS STUFF 20% OF THE TIME
+            #if BMSrequest == True and ContactorsState == False: # waiting for precharge to happen
             if canID == 0x440:
-                logfile.write("{} voltage: {} ".format(int(time.time()), str(((candata[2] & 7) << 8) + candata[1]))+'\n')
-                logfile.flush()
-            if canID == 0x041:
-                if candata[0] != 0x08:
-                    for b in range(DLC):
-                        candata_string += " {:02X}".format(candata[b])
-                    logfile.write("{} {:08X} {} ".format(int(time.time()), canID, candata_string)+'\n')
-                    logfile.flush()
-            #if timestamp % 10 == 0: # every 20 seconds, just for troubleshooting
-            #        for b in range(DLC):
-            #            candata_string += " {:02X}".format(candata[b])
-            #        logfile.write("{} {:08X} {} modfying {:08X} by {:b}".format(int(time.time()), canID, candata_string, ids[((timestamp >> 6) & 31) % 25], timestamp)+'\n')
-            #        logfile.flush()
+                screen.addstr(8,0," motor voltage: {} ".format(str(((candata[2] & 7) << 8) + candata[1]))+'         ')
+                #logfile.write("{} voltage: {} ".format(int(time.time()), str(((candata[2] & 7) << 8) + candata[1]))+'\n')
+                #logfile.flush()
 
-    def logsettings(self,timestamp):
-        for i in range(len(fuckwith)):
-            if fuckwith[i]:
-                logfile.write("1")
-            else:
-                logfile.write("0")
-        logfile.write(" "+str(timestamp)+'\n\r')
-        logfile.flush()
+    def handleBMSMessages(self): # watch for voltage reported by Xalt battery
+        global XaltVoltage
+        raw_bytes_BMS = self.canSocket_BMS.recv(16) # receive message from BMS
+        if raw_bytes_BMS != None: # if a CAN message was waiting
+            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_BMS)
+            canID = rawID & 0x1FFFFFFF
+            if canID == 0x14FF4364: # packet with front, rear, average voltages
+                #XaltVoltage = candata[0] + ((candata[1] & 0x07) << 8) # front voltage
+                XaltVoltage = candata[2] + ((candata[3] & 0x07) << 8) # rear voltage
+                #XaltVoltage = candata[5] + ((candata[6] & 0x07) << 8) # average voltage
+                screen.addstr('                    ') # spaces after v's after voltage
+                screen.addstr(9,0,"battery voltage: "+str(XaltVoltage)+'	')
 
     def contactorControl(self, instruction):
-        os.system('/home/debian/bin/contactorcontrol {}'.format(str(instruction))) # restart mitmlogwatch with the new file
+        os.system('/home/debian/bin/contactorcontrol {}'.format(str(instruction))) # tell the laptop to activate the contactor override hack
+
+    def fakeXaltBMS(self):
+        global XaltHeartbeatCounter, last10Hz, last2Hz, last1Hz
+        timenow = time.time() # only call time.time() once to save time
+        uptime = timenow - canstarttime  # how long since the first CAN message
+
+        if timenow - last10Hz > 0.1:
+            last10Hz  = timenow
+
+            rawID = 0x14FF4064 | CAN_EFF_FLAG # A heartbeat CANmessage 10Hz
+            XaltHeartbeatCounter = (XaltHeartbeatCounter + 1) % 8
+            candatalist = [0,0,0,0,0,0,0,XaltHeartbeatCounter] # init list
+            if uptime > 1.2:
+                candatalist[2] = 0x01
+            if uptime > 2.3:
+                candatalist[2] = 0x02
+            if uptime > 2.9:
+                candatalist[7] |= 0b00001000
+            if uptime > 3.1:
+                candatalist[3] = 0x02
+            if ContactorsState == True:
+                candatalist[1] = 0x02
+                candatalist[7] |= 0b00011000
+            candata = bytes(candatalist)
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4264 | CAN_EFF_FLAG # C efficiency meter 10Hz
+            if uptime > 2.2:
+                candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
+            else:
+                candata = bytes([0x00,0x7D,0xF4,0x01,0xF4,0x01,0x00,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4364 | CAN_EFF_FLAG # D voltage 10Hz
+            candatalist = [XaltVoltage & 0xFF, XaltVoltage >> 8, XaltVoltage & 0xFF, XaltVoltage >> 8, 0, XaltVoltage & 0xFF, XaltVoltage >> 8, 0] # init list
+            candatalist[1] |= 0x08
+            candatalist[3] |= 0x08
+            candata = bytes(candatalist)
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4464 | CAN_EFF_FLAG # E 10Hz
+            if uptime > 1.0:
+                candata = bytes([0x2B,0x87,0x05,0x2A,0x87,0x06,0x2A,0x03])
+            else: # at startup
+                candata = bytes([0,0,0,0,0,0,0,0x54])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF5264 | CAN_EFF_FLAG # M 10Hz
+            candata = bytes([0xA9,0x02,0xA9,0x02,0x00,0xA9,0x02,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF5664 | CAN_EFF_FLAG # Q highest and lowest cell voltages 10Hz
+            candata = bytes([0xBC,0x82,0x04,0xBC,0x82,0x05,0xBC,0x02]) # 595/168=3.54v
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+        if timenow - last2Hz > 0.5:
+            last2Hz  = timenow
+
+            rawID = 0x14FF4564 | CAN_EFF_FLAG # F SOC 2Hz
+            candata = bytes([0x80,0x80,0x01,0x80,0x01,0x18,0x3D,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4664 | CAN_EFF_FLAG # G 2Hz
+            candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+        if timenow - last1Hz > 1.0:
+            last1Hz  = timenow
+
+            rawID = 0x14FF4164 | CAN_EFF_FLAG # B high, low, and average cell temperature 1Hz
+            if uptime > 1.2:
+                candata = bytes([0x00,0x00,0x10,0xA0,0x00,0x10,0x28,0x01])
+            else:
+                candata = bytes([0x28,0x00,0x10,0x28,0x00,0x10,0x28,0x01])
+            if uptime > 2.0:
+                candata = bytes([0x00,0x60,0x15,0xA0,0x00,0x14,0x28,0x01])
+            if uptime > 10.0:
+                candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4764 | CAN_EFF_FLAG # H 1Hz
+            candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4864 | CAN_EFF_FLAG # I 1Hz
+            candata = bytes([0xB0,0x04,0x88,0x01,0x83,0x01,0x7F,0x01])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            rawID = 0x14FF4964 | CAN_EFF_FLAG # J 1Hz
+            candata = bytes([0xCB,0x00,0x45,0x00,0x45,0x00,0x42,0x00])
+            self.canSocket_vehicle.send(struct.pack(canformat, rawID, 8, candata))
+
+            # rawID = 0x14FF5164 | CAN_EFF_FLAG # skipped 5064, no changes needed, it's ids[0x11]
+            # candata = bytes([0x91,0x00,0xCA,0x30,0x01,0x93,0x00,0x00])
+
+            # rawID = 0x14FF5364 | CAN_EFF_FLAG
+            # candata = bytes([0xB1,0x07,0x00,0xB1,0x07,0x00,0xB1,0x03])
+
+            # rawID = 0x14FF5464 | CAN_EFF_FLAG # this one alternates between two messages
+            # candatalist = list(candata) # get a list that we can tamper with
+            # candatalist[5] = 0
+
+            # rawID = 0x14FF5864 | CAN_EFF_FLAG # 5764 doesn't exist
+            # if uptime > 0.2:
+            #     candata = bytes([0,3,0,0,0,0,0,0])
+            # else: # at startup
+            #     candata = bytes([0,0,0,0,0,0,0,0])
+            # if uptime > 2.3:
+            #     candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
+
+            # rawID = 0x18FF5764 | CAN_EFF_FLAG # 5564 doesn't need changed
+            # candatalist = list(candata) # get a list that we can tamper with
+            # if candatalist[0] == 0x66:
+            #     candatalist[5] = 0x00
+            #     candatalist[6] = 0xE3
+            # candata = bytes(candatalist)
+
+            # rawID = 0x18FF5964 | CAN_EFF_FLAG
+            # candata = bytes([0x66,0x00,0x00,0x00,0x00,0x00,0x00,0x00])
+
+            # rawID = 0x18FF9FF3 | CAN_EFF_FLAG
+            # candata = bytes([0xDC,0x8D,0x32,0xFA,0xE3,0xD5,0x7D,0x01])
 
     def run(self, display=True):
-        global fuckwith, canstarttime, startupstate # access the message filter array
         while True:
-            self.checkMotorSignals() # if messages heading from vehicle, check them
+            self.handleVehicleMessages() # if messages heading from vehicle, check them
+            self.handleBMSMessages() # if messages heading from BMS, check them
+            self.fakeXaltBMS() # send messages pretending to be a happy Xalt BMS to please EDI
             key = screen.getch() # this is blocking unless you do .nodelay(1)
             if key == ord('z'):
                 self.contactorControl(123123) # disengage contactors
@@ -227,11 +348,11 @@ class CanBridge():
                     if key & 0b00100000 > 0: # lowercase
                         sprnt("pass {:08X}".format(ids[(key & 0b11011111) - 65 ]))
                         logfile.write("pass {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
-                        fuckwith[(key & 0b11011111) - 65 ] = False;
+                        #fuckwith[(key & 0b11011111) - 65 ] = False;
                     else: # uppercase
                         sprnt("FORCE {:08X}".format(ids[(key & 0b11011111) - 65 ]))
                         logfile.write("FORCE {:08X} ".format(ids[(key & 0b11011111) - 65 ]))
-                        fuckwith[(key & 0b11011111) - 65 ] = True;
+                        #fuckwith[(key & 0b11011111) - 65 ] = True;
                     self.logsettings(int(time.time()))
                 elif key > 47 and key < 58: # key is a number
                     startupstate = key - 48
@@ -239,154 +360,6 @@ class CanBridge():
                     logfile.write("startupstate = {} ".format(startupstate))
                     self.logsettings(int(time.time()))
 
-            raw_bytes_BMS = self.canSocket_BMS.recv(16) # receive message from BMS
-            rawID,DLC,candata = struct.unpack(canformat,raw_bytes_BMS)
-            canID = rawID & 0x1FFFFFFF
-            if (rawID & CAN_ERR_FLAG) == CAN_ERR_FLAG:
-                sprnt("Found Error Frame.")
-                sprnt("RawID: {:08X}, data: {}".format(rawID,candata))
-
-                if canID == 1:
-                    sprnt("TX timeout")
-                elif canID == 2:
-                    sprnt ("Lost arbitration")
-                elif canID == 4:
-                    sprnt("Controller problems")
-                elif canID == 8:
-                    sprnt("Protocol violations")
-                elif canID == 16:
-                    sprnt("Transceiver status")
-                elif canID == 32:
-                    sprnt("No Acknkowlegement on transmission")
-                elif canID == 64:
-                    sprnt("Bus off")
-                elif canID == 128:
-                    sprnt("{:03X}: Bus error. {}".format(canID,candata))
-                elif canID == 0x100:
-                    sprnt("Controller restarted")
-            elif rawID & CAN_RTR_FLAG == CAN_RTR_FLAG:
-                sprnt("Received RTR frame.")
-            else: #Normal data frame
-                canID = rawID & 0x1FFFFFFF
-                # https://python-can.readthedocs.io/en/1.5.2/_modules/can/interfaces/socketcan_native.html
-                if canID in ids:
-                    if fuckwith[ids.index(canID)]: # if we're supposed to be fucking with this message
-
-                        if startupstate == 9:
-                            uptime = time.time() - canstarttime  # how long since the first CAN message THIS IS THE DEFAULT SETTING
-                            #screen.addstr(12,12,str(int(uptime)))
-                        if startupstate == 0: uptime = 0
-                        if startupstate == 1: uptime = 1.5
-                        if startupstate == 2: uptime = 2.5
-                        if startupstate == 3: uptime = 3.5
-                        if startupstate == 4: uptime = 30
-                        if startupstate == 8:
-                            startupstate = 9 # go back to uptime mode THIS IS THE DEFAULT SETTING
-                            canstarttime = time.time() # restart timed cycle
-
-                        if canID == 0x14FF4064: # heartbeat CANmessage
-                            candatalist = list(candata) # get a list that we can tamper with
-                            candatalist[7] &= 0b00000111 # clear the error bit at bit 5?
-                            if uptime > 1.2:
-                                candatalist[2] = 0x01
-                            else: # at startup
-                                candata = bytes([0,0,0,0,0,0,0,0])
-                            if uptime > 2.3:
-                                candatalist[2] = 0x02
-                            if uptime > 2.9:
-                                candatalist[7] |= 0b00001000
-                            if uptime > 3.1:
-                                candatalist[3] = 0x02
-                            if ContactorsState == True:
-                                candatalist[1] = 0x02
-                                candatalist[7] |= 0b00011000
-                            candata = bytes(candatalist)
-
-                        if canID == 0x14FF4164: #  high, low, and average cell temperature
-                            if uptime > 1.2:
-                                candata = bytes([0x00,0x00,0x10,0xA0,0x00,0x10,0x28,0x01])
-                            else:
-                                candata = bytes([0x28,0x00,0x10,0x28,0x00,0x10,0x28,0x01])
-                            if uptime > 2.0:
-                                candata = bytes([0x00,0x60,0x15,0xA0,0x00,0x14,0x28,0x01])
-                            if uptime > 10.0:
-                                candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
-
-                        if canID == 0x14FF4264: #  efficiency meter
-                            if uptime > 2.2:
-                                candata = bytes([0x00,0x7D,0xF4,0x05,0xF4,0x05,0x00,0x00])
-                            else:
-                                candata = bytes([0x00,0x7D,0xF4,0x01,0xF4,0x01,0x00,0x00])
-
-                        if canID == 0x14FF4364: #  voltage (we want to pass this through mostly)
-                            candatalist = list(candata) # get a list that we can tamper with
-                            candatalist[1] |= 0x08
-                            candatalist[3] |= 0x08
-                            candata = bytes(candatalist)
-
-                        if canID == 0x14FF4464:
-                            if uptime > 1.0:
-                                candata = bytes([0x2B,0x87,0x05,0x2A,0x87,0x06,0x2A,0x03])
-                            else: # at startup
-                                candata = bytes([0,0,0,0,0,0,0,0x54])
-
-                        if canID == 0x14FF4564: # SOC
-                            candata = bytes([0x80,0x80,0x01,0x80,0x01,0x18,0x3D,0x00])
-
-                        if canID == 0x14FF4664:
-                            candata = bytes([0xE3,0xE3,0x01,0xE3,0x01,0x18,0x3D,0x00])
-
-                        if canID == 0x14FF4764:
-                            candata = bytes([0x3E,0xE1,0x04,0x3D,0x01,0x04,0x3D,0x00])
-
-                        if canID == 0x14FF4864:
-                            candata = bytes([0xB0,0x04,0x88,0x01,0x83,0x01,0x7F,0x01])
-
-                        if canID == 0x14FF4964:
-                            candata = bytes([0xCB,0x00,0x45,0x00,0x45,0x00,0x42,0x00])
-
-                        if canID == 0x14FF5164: # skipped 5064, no changes needed, it's ids[0x11]
-                            candata = bytes([0x91,0x00,0xCA,0x30,0x01,0x93,0x00,0x00])
-
-                        if canID == 0x14FF5264:
-                            candata = bytes([0xA9,0x02,0xA9,0x02,0x00,0xA9,0x02,0x00])
-
-                        if canID == 0x14FF5364:
-                            candata = bytes([0xB1,0x07,0x00,0xB1,0x07,0x00,0xB1,0x03])
-
-                        if canID == 0x14FF5464: # this one alternates between two messages
-                            candatalist = list(candata) # get a list that we can tamper with
-                            candatalist[5] = 0
-                            candata = bytes(candatalist)
-
-                        if canID == 0x14FF5664: # 5564 doesn't need changed
-                            candata = bytes([0xBC,0x82,0x04,0xBC,0x82,0x05,0xBC,0x02]) # 595/168=3.54v
-
-                        if canID == 0x14FF5864: # 5764 doesn't exist
-                            if uptime > 0.2:
-                                candata = bytes([0,3,0,0,0,0,0,0])
-                            else: # at startup
-                                candata = bytes([0,0,0,0,0,0,0,0])
-                            if uptime > 2.3:
-                                candata = bytes([0x00,0x03,0x00,0x17,0x00,0x00,0x00,0x00])
-
-                        if canID == 0x18FF5764: # 5564 doesn't need changed
-                            candatalist = list(candata) # get a list that we can tamper with
-                            if candatalist[0] == 0x66:
-                                candatalist[5] = 0x00
-                                candatalist[6] = 0xE3
-                            candata = bytes(candatalist)
-
-                        if canID == 0x18FF5964:
-                            candata = bytes([0x66,0x00,0x00,0x00,0x00,0x00,0x00,0x00])
-
-                        if canID == 0x18FF9FF3:
-                            candata = bytes([0xDC,0x8D,0x32,0xFA,0xE3,0xD5,0x7D,0x01])
-
-            self.canSocket_vehicle.send(struct.pack(canformat, rawID, DLC, candata))
-            # self.canSocket_vehicle.send(raw_bytes_BMS)
-
-canstarttime = 0 # this gets set to present time upon the first CAN message arrival
 if __name__ == '__main__': #           vehicle                 BMS
     bridge = CanBridge(interface_vehicle='can1',interface_BMS='can0',bitrate_from=0,bitrate_to=0) # bitrates are not implemented
     starttime = time.time() # when we actually began
